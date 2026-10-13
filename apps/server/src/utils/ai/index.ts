@@ -7,6 +7,7 @@ import { z } from "zod";
 import conf from "@/utils/conf";
 import { readReference } from "@/utils/media/generation";
 import modelContextLimits from "@/utils/ai/modelContextLimits";
+import { sanitizeModelPayload } from "@/utils/ai/jsonSchema";
 
 export { fetchProviderModels } from "@/utils/ai/models";
 export { refreshProviderModels } from "@/utils/ai/initialize";
@@ -138,19 +139,24 @@ export function streamAi(
   return aiApis[provider.protocol].streamSimple(model, context, {
     apiKey: provider.apiKey,
     signal,
-    onPayload: references.length ? (payload) => {
-      const body = payload as Record<string, unknown>;
-      const field = provider.protocol === "openai-responses" ? "input" : "messages";
-      const messages = body[field] as { role: string; content: unknown }[];
-      // ACT: 后续 Anthropic 工具结果也使用 user 角色，附件只补充到最初的输入。
-      const firstUser = messages.findIndex(message => message.role === "user");
-      const attachmentContent = referenceContent(provider.protocol, "", references).slice(1);
-      return { ...body, [field]: messages.map((message, index) => index === firstUser
-        ? { ...message, content: [
-          ...(Array.isArray(message.content) ? message.content : referenceContent(provider.protocol, String(message.content ?? ""), [])),
-          ...attachmentContent,
-        ] }
-        : message) };
-    } : undefined,
+    onPayload: (payload) => {
+      const source = payload as Record<string, unknown>;
+      let body = source;
+      if (references.length) {
+        const field = provider.protocol === "openai-responses" ? "input" : "messages";
+        const messages = source[field] as { role: string; content: unknown }[];
+        // ACT: 后续 Anthropic 工具结果也使用 user 角色，附件只补充到最初的输入。
+        const firstUser = messages.findIndex(message => message.role === "user");
+        const attachmentContent = referenceContent(provider.protocol, "", references).slice(1);
+        body = { ...source, [field]: messages.map((message, index) => index === firstUser
+          ? { ...message, content: [
+            ...(Array.isArray(message.content) ? message.content : referenceContent(provider.protocol, String(message.content ?? ""), [])),
+            ...attachmentContent,
+          ] }
+          : message) };
+      }
+      sanitizeModelPayload(body);
+      return body;
+    },
   });
 }

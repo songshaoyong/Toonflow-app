@@ -3,6 +3,7 @@ import { createAgentSession, SessionManager, SettingsManager } from "@earendil-w
 import type { AgentSession, CreateAgentSessionOptions, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { ToolCall } from "@toonflow/tools-scaffold/runtime";
 import { createAgentResources } from "@/agent/runtime/resources";
+import { installModelPayloadCompat } from "@/utils/ai/jsonSchema";
 
 export type SubAgentModel = Pick<CreateAgentSessionOptions, "modelRuntime" | "model" | "thinkingLevel">;
 export type SubAgentResult = {
@@ -76,6 +77,7 @@ export async function runSubAgent(options: SubAgentModel & {
       tools: activeTools.map(tool => tool.name),
     }));
     signal.throwIfAborted();
+    installModelPayloadCompat(session.agent);
     session.agent.shouldStopAfterTurn = () => Boolean(inputRequired?.());
     session.subscribe(event => {
       if (signal.aborted) return;

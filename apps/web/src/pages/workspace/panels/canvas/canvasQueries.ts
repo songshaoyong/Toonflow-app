@@ -7,6 +7,16 @@ type ValueOptions = { textOffset: number; textLimit: number; valueOffset: number
 type OmittedValue = { path: string[]; reason: string; total?: number; nextOffset?: number };
 const encoder = new TextEncoder();
 const responseBytes = 64 * 1024;
+// 分页游标只用来判断查询是否变化。局域网 http 没有 crypto.subtle，不能用 SHA-256。
+function queryKey(value: unknown) {
+  const text = JSON.stringify(value);
+  const seeds = [0x811c9dc5, 0x811c9dc5 ^ 0x9e3779b9, 0x811c9dc5 ^ 0x85ebca6b, 0x811c9dc5 ^ 0xc2b2ae35];
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    for (let seed = 0; seed < seeds.length; seed++) seeds[seed] = Math.imul(seeds[seed]! ^ code, 0x01000193);
+  }
+  return seeds.map(seed => (seed >>> 0).toString(16).padStart(8, "0")).join("");
+}
 const pageBytes = 52 * 1024;
 const scanLimit = 2000;
 const readNames = new Set(["getCanvas", "findCanvasNodes", "getCanvasNodes", "getCanvasEdges", "getNodeTools"]);
@@ -160,9 +170,8 @@ export function createCanvasQueries(source: {
       canvases: (args as { include?: string[] }).include?.includes("canvases") ? source.canvases() : [],
       types: (args as { include?: string[] }).include?.includes("nodeTypes") ? source.nodeTypes() : [],
     } : undefined;
-    const digest = await crypto.subtle.digest("SHA-256", encoder.encode(JSON.stringify([name, filters, metadata])));
+    const key = queryKey([name, filters, metadata]);
     signal.throwIfAborted();
-    const key = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
     const revision = name === "getCanvasEdges" ? source.edgeRevision() : name === "getNodeTools" ? `${source.nodeRevision()}:${source.nodeTools().version}` : source.nodeRevision();
     let offset = 0;
     if (cursor) {

@@ -1,4 +1,5 @@
-FROM oven/bun:1.3.14
+# 本机 Docker 配置的中科大镜像已失效，改为从 DaoCloud 拉取同一官方镜像。
+FROM docker.m.daocloud.io/oven/bun:1.3.14
 
 WORKDIR /app
 

@@ -1,6 +1,23 @@
 <!doctype html>
 <html lang="zh-CN" data-theme="light">
   <head>
+    <!-- 局域网 http 不是安全上下文，浏览器没有 crypto.randomUUID。 -->
+    <script>
+      (function () {
+        var cryptoObj = globalThis.crypto;
+        if (!cryptoObj || typeof cryptoObj.randomUUID === "function") return;
+        cryptoObj.randomUUID = function randomUUID() {
+          var bytes = new Uint8Array(16);
+          cryptoObj.getRandomValues(bytes);
+          bytes[6] = (bytes[6] & 15) | 64;
+          bytes[8] = (bytes[8] & 63) | 128;
+          var hex = Array.from(bytes, function (value) {
+            return value.toString(16).padStart(2, "0");
+          }).join("");
+          return hex.slice(0, 8) + "-" + hex.slice(8, 12) + "-" + hex.slice(12, 16) + "-" + hex.slice(16, 20) + "-" + hex.slice(20);
+        };
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Toonflow</title>

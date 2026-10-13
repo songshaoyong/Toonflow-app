@@ -4,7 +4,8 @@ services:
     init: true
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3000:3000"
+      # 绑定到所有网卡，Windows 才能通过 localhost 转发访问 WSL 里的服务。
+      - "3000:3000"
     volumes:
       - toonflowData:/app/data
 
