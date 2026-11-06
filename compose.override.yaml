@@ -1,0 +1,12 @@
+# 本地覆盖：保留旧实例的访问方式（绑定所有网卡，Windows 与局域网可访问）
+# 新版本仓库默认改为 127.0.0.1:3000，此处显式覆盖，避免 Windows 无法访问 WSL 内服务。
+services:
+  toonflow:
+    ports: !override
+      - "3000:3000"
+    # 容器默认直连不到被墙的上游（如 api.apikey.fan），走 Windows 侧 7891 中继。
+    # 中继由 muse2api/deploy/start-proxy-relay.ps1 启动，监听 172.17.192.1:7891 -> 127.0.0.1:7890。
+    environment:
+      - HTTP_PROXY=http://172.17.192.1:7891
+      - HTTPS_PROXY=http://172.17.192.1:7891
+      - NO_PROXY=localhost,127.0.0.1,172.17.192.1,host.docker.internal

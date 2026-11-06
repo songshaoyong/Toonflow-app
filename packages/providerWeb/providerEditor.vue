@@ -108,6 +108,7 @@ import deepSeekSource from "@toonflow/providers/language/deepSeek?raw";
 import apiMartSource from "@toonflow/providers/media/apiMart?raw";
 import metasoSource from "@toonflow/providers/media/metaso?raw";
 import compshareSource from "@toonflow/providers/media/compshare?raw";
+import jimengFreeApiSource from "@toonflow/providers/media/jimengFreeApi?raw";
 import "element-plus/es/components/alert/style/css";
 import "element-plus/es/components/button/style/css";
 import "element-plus/es/components/dialog/style/css";
@@ -131,6 +132,7 @@ const presets = [
   { kind: "media", id: "apiMart", label: "APIMart", source: apiMartSource },
   { kind: "media", id: "metaso", label: "秘塔", source: metasoSource },
   { kind: "media", id: "compshare", label: "优刻得", source: compshareSource },
+  { kind: "media", id: "jimengFreeApi", label: "即梦聚合", source: jimengFreeApiSource },
 ];
 const availablePresets = computed(() => presets.filter(item => item.kind === props.kind));
 const method = ref("manual");
