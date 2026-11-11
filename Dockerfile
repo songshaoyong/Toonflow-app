@@ -15,6 +15,11 @@ RUN bun run build:server \
     && mkdir -p data/workspaces/myProject \
     && chown -R bun:bun data
 
+# ACT: 抖音等需要真实浏览器的工具在容器内运行，Chromium 只增加运行时依赖，不影响构建缓存。
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends chromium \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV NODE_ENV=production
 ENV TOONFLOW_DATA_DIR=/app/data
 
