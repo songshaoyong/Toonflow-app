@@ -2,9 +2,27 @@ import axios from "axios";
 import { actualPlatform } from "./platform";
 
 const headers = { "x-toonflow-desktop": "1" };
+let writingClipboard = false;
+
+export function isWritingClipboard() {
+  return writingClipboard;
+}
+
+function clipboardAccessDenied(): never {
+  throw new DOMException("当前环境不支持读取剪贴板", "NotAllowedError");
+}
+
+function asyncClipboard() {
+  const clipboard = navigator.clipboard;
+  return window.isSecureContext && clipboard ? clipboard : undefined;
+}
 
 export async function readClipboardText(): Promise<string> {
-  if (!actualPlatform.isDesktop) return navigator.clipboard.readText();
+  if (!actualPlatform.isDesktop) {
+    const clipboard = asyncClipboard();
+    if (!clipboard?.readText) clipboardAccessDenied();
+    return clipboard.readText();
+  }
   const { data } = await axios.post<{ code: number; data: { text: string }; message: string }>("/api/desktop/clipboard/read", {}, { headers });
   if (data.code !== 200) throw new Error(data.message || "读取剪贴板失败");
   return data.data.text;
@@ -18,8 +36,9 @@ export async function readClipboardImage(): Promise<Blob | null> {
     const binary = atob(data.data.image);
     return new Blob([Uint8Array.from(binary, (char) => char.charCodeAt(0))], { type: "image/png" });
   }
-  if (!navigator.clipboard?.read) throw new Error("当前环境不支持读取剪贴板图片");
-  for (const item of await navigator.clipboard.read()) {
+  const clipboard = asyncClipboard();
+  if (!clipboard?.read) clipboardAccessDenied();
+  for (const item of await clipboard.read()) {
     const imageType = item.types.find((type) => type.startsWith("image/"));
     if (imageType) return item.getType(imageType);
   }
@@ -42,9 +61,10 @@ export async function readClipboardFiles(): Promise<File[]> {
     if (data.code !== 200) throw new Error(data.message || "读取剪贴板文件失败");
     return data.data.files.map(file => clipboardFile(file.mimeType, file.data, file.name));
   }
-  if (!navigator.clipboard?.read) throw new Error("当前环境不支持读取剪贴板文件");
+  const clipboard = asyncClipboard();
+  if (!clipboard?.read) clipboardAccessDenied();
   const files: File[] = [];
-  for (const item of await navigator.clipboard.read()) {
+  for (const item of await clipboard.read()) {
     for (const type of item.types.filter(type => /^(image|audio|video)\//.test(type))) {
       const extension = type.split("/")[1]?.replace(/[^a-z0-9]/gi, "") || "bin";
       files.push(new File([await item.getType(type)], "pasted-media-" + (files.length + 1) + "." + extension, { type }));
@@ -86,11 +106,84 @@ export async function writeClipboardImage(image: Blob): Promise<void> {
     if (data.code !== 200) throw new Error(data.message || "写入剪贴板图片失败");
     return;
   }
-  if (!navigator.clipboard?.write) throw new Error("当前环境不支持写入剪贴板图片");
-  await navigator.clipboard.write([new ClipboardItem({ "image/png": await imagePngBlob(image) })]);
+  const png = await imagePngBlob(image);
+  const clipboard = asyncClipboard();
+  if (clipboard?.write) {
+    await clipboard.write([new ClipboardItem({ "image/png": png })]);
+    return;
+  }
+  // ACT: 局域网 HTTP 没有异步剪贴板，blob 文件也写不进系统剪贴板。data URL 的 HTML 可以在粘贴时还原成图片。
+  await writeImageFallback(png);
+}
+
+export function imageBlobsFromClipboardHtml(html: string) {
+  const blobs: Blob[] = [];
+  const pattern = /<img\b[^>]*\bsrc=["'](data:image\/[a-z0-9.+-]+;base64,[^"']+)["']/gi;
+  for (const match of html.matchAll(pattern)) {
+    const url = match[1];
+    if (!url) continue;
+    const mime = url.slice(5, url.indexOf(";"));
+    try {
+      const binary = atob(url.slice(url.indexOf(",") + 1));
+      blobs.push(new Blob([Uint8Array.from(binary, char => char.charCodeAt(0))], { type: mime }));
+    } catch {
+      continue;
+    }
+  }
+  return blobs;
+}
+
+async function writeImageFallback(image: Blob) {
+  const html = `<img src="data:image/png;base64,${await blobBase64(image)}">`;
+  let written = false;
+  const onCopy = (event: ClipboardEvent) => {
+    const data = event.clipboardData;
+    if (!data) return;
+    data.setData("text/html", html);
+    event.preventDefault();
+    written = true;
+  };
+  document.addEventListener("copy", onCopy, true);
+  writingClipboard = true;
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } finally {
+    writingClipboard = false;
+    document.removeEventListener("copy", onCopy, true);
+  }
+  if (!copied || !written) throw new Error("当前环境不支持写入剪贴板图片");
+}
+function writeTextFallback(text: string) {
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  area.style.cssText = "position:fixed;left:-10000px;top:0";
+  document.body.append(area);
+  const previous = document.activeElement;
+  writingClipboard = true;
+  let copied = false;
+  try {
+    area.focus();
+    area.select();
+    copied = document.execCommand("copy");
+  } finally {
+    writingClipboard = false;
+    area.remove();
+    if (previous instanceof HTMLElement) previous.focus({ preventScroll: true });
+  }
+  if (!copied) throw new Error("当前环境不支持写入剪贴板");
 }
 export async function writeClipboardText(text: string): Promise<void> {
-  if (!actualPlatform.isDesktop) return navigator.clipboard.writeText(text);
+  if (!actualPlatform.isDesktop) {
+    const clipboard = asyncClipboard();
+    if (clipboard?.writeText) {
+      await clipboard.writeText(text);
+      return;
+    }
+    writeTextFallback(text);
+    return;
+  }
   const { data } = await axios.post<{ code: number; message: string }>("/api/desktop/clipboard/write", { text }, { headers });
   if (data.code !== 200) throw new Error(data.message || "写入剪贴板失败");
 }

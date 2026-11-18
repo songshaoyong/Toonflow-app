@@ -6,6 +6,31 @@ type CanvasEdge = { id: string; source: string; target: string; sourceHandle?: s
 type ValueOptions = { textOffset: number; textLimit: number; valueOffset: number; valueLimit: number };
 type OmittedValue = { path: string[]; reason: string; total?: number; nextOffset?: number };
 const encoder = new TextEncoder();
+
+// SHA-256 via Web Crypto is unavailable on LAN HTTP (not a secure context).
+// Keep the same digest on HTTPS and use a stable 128-bit fallback on HTTP.
+function fallbackDigest(value: string) {
+  let hash1 = 0x811c9dc5;
+  let hash2 = 0x9e3779b9;
+  let hash3 = 0x85ebca6b;
+  let hash4 = 0xc2b2ae35;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    hash1 = Math.imul(hash1 ^ code, 0x01000193);
+    hash2 = Math.imul(hash2 ^ code, 0x85ebca6b);
+    hash3 = Math.imul(hash3 ^ code, 0xc2b2ae35);
+    hash4 = Math.imul(hash4 ^ code, 0x27d4eb2f);
+  }
+  return [hash1, hash2, hash3, hash4].map(hash => (hash >>> 0).toString(16).padStart(8, "0")).join("");
+}
+
+async function queryDigest(value: string) {
+  if (globalThis.crypto?.subtle) {
+    const digest = await crypto.subtle.digest("SHA-256", encoder.encode(value));
+    return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+  }
+  return fallbackDigest(value);
+}
 const responseBytes = 64 * 1024;
 const pageBytes = 52 * 1024;
 const scanLimit = 2000;
@@ -162,9 +187,8 @@ export function createCanvasQueries(source: {
       types: (args as { include?: string[] }).include?.includes("nodeTypes") ? source.nodeTypes() : [],
     } : undefined;
     const permissions = name === "getNodeTools" ? source.nodeToolPermissions() : undefined;
-    const digest = await crypto.subtle.digest("SHA-256", encoder.encode(JSON.stringify([name, filters, metadata, permissions])));
+    const key = await queryDigest(JSON.stringify([name, filters, metadata, permissions]));
     signal.throwIfAborted();
-    const key = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
     const revision = name === "getCanvasEdges" ? source.edgeRevision() : name === "getNodeTools" ? `${source.nodeRevision()}:${source.nodeTools().version}` : source.nodeRevision();
     let offset = 0;
     if (cursor) {

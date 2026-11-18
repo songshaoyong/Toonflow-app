@@ -4,6 +4,7 @@ import type { useVueFlow } from "@vue-flow/core";
 import { uploadNodeFile } from "@toonflow/nodes-scaffold/workspaceFiles";
 import type { NodeOutput } from "@toonflow/nodes-scaffold/values";
 import useWorkspaceFiles from "@/lib/workspaceFiles";
+import { imageBlobsFromClipboardHtml } from "@/lib/clipboard";
 import { getMediaMimeType, mediaMimeTypes } from "@toonflow/node-shared/mediaTypes";
 
 const assetDragType = "application/toonflow-asset";
@@ -50,14 +51,15 @@ export function createClipboardMediaFile(blob: Blob, index = 0) {
 export function getClipboardMediaFiles(event: ClipboardEvent) {
   const transfer = event.clipboardData;
   if (!transfer) return [];
-  const files: File[] = [];
+  const media: Blob[] = [];
   for (const item of transfer.items) {
     if (item.kind !== "file") continue;
     const file = item.getAsFile();
-    if (file && inferredMediaType(file)) files.push(file);
+    if (file && inferredMediaType(file)) media.push(file);
   }
-  if (!files.length) files.push(...Array.from(transfer.files).filter(file => !!inferredMediaType(file)));
-  return files.map((file, index) => createClipboardMediaFile(file, index));
+  if (!media.length) media.push(...Array.from(transfer.files).filter(file => !!inferredMediaType(file)));
+  if (!media.length) media.push(...imageBlobsFromClipboardHtml(transfer.getData("text/html")));
+  return media.map((file, index) => createClipboardMediaFile(file, index));
 }
 
 export function startAssetDrag(event: DragEvent, entry: { type: string; path: string }) {

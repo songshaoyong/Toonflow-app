@@ -169,7 +169,7 @@ import { loadNodeComponent } from "./loadNodeComponent";
 import { useCanvasHistory } from "./useCanvasHistory";
 import { copyNodeToClipboard, copyNodesToClipboard, nodeClipboardCommand, readClipboardNodes } from "./nodeClipboard";
 import { remapNodeReferences } from "./canvasFiles";
-import { readClipboardFiles, readClipboardText, writeClipboardImage } from "@/lib/clipboard";
+import { isWritingClipboard, readClipboardFiles, readClipboardText, writeClipboardImage } from "@/lib/clipboard";
 import nodeMenu from "./components/nodeMenu.vue";
 import remoteNode from "./components/remoteNode.vue";
 import canvasMenu from "./components/canvasMenu.vue";
@@ -915,14 +915,14 @@ function canUseCanvasClipboard(event: Event) {
 }
 
 function beforeClipboard(event: Event) {
-  if (!canUseCanvasClipboard(event)) return;
+  if (isWritingClipboard() || !canUseCanvasClipboard(event)) return;
   if (event.type === "beforecopy" && (!flow.getSelectedNodes.value.length || window.getSelection()?.toString())) return;
   // ACT: WKWebView 通过 beforecopy/beforepaste 判定非输入区能否使用原生编辑菜单。
   event.preventDefault();
 }
 
 function copyNode(event: ClipboardEvent) {
-  if (!canUseCanvasClipboard(event) || !flow.getSelectedNodes.value.length || window.getSelection()?.toString()) return;
+  if (isWritingClipboard() || !canUseCanvasClipboard(event) || !flow.getSelectedNodes.value.length || window.getSelection()?.toString()) return;
   event.preventDefault();
   void copySelectedNodes();
 }
