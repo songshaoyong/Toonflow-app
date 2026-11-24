@@ -322,6 +322,15 @@ export default {
       mode: ["text", "singleImage", ["imageReference:10"]],
       durationResolutionMap: [{ duration: [5, 10], resolution: ["720p", "1080p"] }],
     },
+    {
+      id: "minimax:h3",
+      label: "MiniMax H3-RH Enhanced（多模态参考）",
+      type: "video",
+      mode: ["text", "singleImage", "endFrameOptional"],
+      durationResolutionMap: [
+        { duration: [5, 15], resolution: ["480p", "768P", "1080p", "2K"] },
+      ],
+    },
   ] satisfies ProviderModel[],
   async generateImage(request: ImageRequest): Promise<MediaAsset[]> {
     const apiKey = String(this.config.apiKey ?? "").trim();
